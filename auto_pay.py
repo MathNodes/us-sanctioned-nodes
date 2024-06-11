@@ -71,10 +71,13 @@ class SanctionedPay():
             
             if nodeJSON['node']['status'] == "inactive":
                 self.logfile.write("[sp]: Node is inactive, not paying...\n")
-                return False
-            return True
+                return {"active" : False, "addr" : None}
+            
+            resp = requests.get(nodeJSON['node']['remote_url'] + "/status", verify=False)
+            return {"active" : True, "addr" : resp.json()['result']['operator']}
         except Exception as e:
             print(f"[sp]: {str(e)}")
+            self.logfile.write(f"[sp]: {str(e)}\n")
             return False
         
     def __get_balance(self, address):
@@ -97,13 +100,17 @@ class SanctionedPay():
             return None
         return CoinDict
     
-    def SendBounty(self, amt, addr, node):
+    def SendBounty(self, amt, node):
         self.logfile.write("[sp]: Checking if node is still active...\n")
         
-        if not self.__check_if_node_is_active(node):
+        result = self.__check_if_node_is_active(node)
+        
+        if not result['active']:
             self.logfile.write(f"[sp]: node: {node} is inactive.\n")
             return False
         
+        addr = result['addr']
+        self.logfile.write(f"[sp]: {addr}\n")
         self.logfile.write(f"[sp]: node: {node} is active. Commencing bounty payment...\n")
         balance = self.__get_balance(self.sdk._account.address)
         bounty_balance = int(balance.get("dvpn", 0))
@@ -170,12 +177,12 @@ if __name__ == "__main__":
     
     parser.add_argument('--seed', action='store_true',help='set if you are specifying a seedphrase', default=False)
     parser.add_argument('--amount', help="amount to pay bounty address", metavar="udvpn")
-    parser.add_argument('--address', help="sentintel address to send the bounty amount to", metavar="sent...")
+    #parser.add_argument('--address', help="sentintel address to send the bounty amount to", metavar="sent...")
     parser.add_argument('--node', help="sentnode... address. required to verify node is active to receive bounty", metavar="sentnode...")
     args = parser.parse_args()
     
     
-    if not args.amount or not args.address or not args.node:
+    if not args.amount or not args.node:
         parser.print_help()
         sys.exit(1)
     
@@ -185,7 +192,7 @@ if __name__ == "__main__":
     else:
         sp = SanctionedPay(scrtxxs.HotWalletPW, scrtxxs.WalletName, None)
         
-    if sp.SendBounty(args.amount, args.address, args.node):
+    if sp.SendBounty(args.amount, args.node):
         sp.logfile.write("[sp]: Success.\n")
     else:
         sp.logfile.write("[sp]: Failed.\n")
